@@ -14,6 +14,8 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 
 cp "$HERE/.build/release/VoittaTask" "$APP/Contents/MacOS/VoittaTask"
 cp "$ROOT/engine/target/release/voitta-task-engine" "$APP/Contents/MacOS/voitta-task-engine"
+# SPM resource bundle (dog logo etc.) — Bundle.module finds it in Resources/.
+cp -R "$HERE/.build/release/VoittaTask_VoittaTask.bundle" "$APP/Contents/Resources/"
 
 cat > "$APP/Contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>

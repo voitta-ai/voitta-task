@@ -60,6 +60,11 @@ private struct TotalHeightKey: PreferenceKey {
     }
 }
 
+/// The Voitta dog (brown dog in a human mask), shown in the panel header.
+private let voittaDog: NSImage? = Bundle.module
+    .url(forResource: "voitta-dog", withExtension: "png")
+    .flatMap { NSImage(contentsOf: $0) }
+
 struct SessionsView: View {
     @ObservedObject var model: SessionsModel
     /// Called after a session row is clicked — the host hides our window.
@@ -88,8 +93,17 @@ struct SessionsView: View {
                     .font(.system(size: 11, weight: .medium))
                     .padding(.horizontal, 7).padding(.vertical, 2)
                     .background(Capsule().fill(Color.secondary.opacity(0.2)))
+                if let dog = voittaDog {
+                    Image(nsImage: dog)
+                        .resizable()
+                        .interpolation(.high)
+                        .aspectRatio(contentMode: .fit)
+                        .frame(height: 40)
+                        .padding(.leading, 4)
+                        .accessibilityLabel("Voitta")
+                }
             }
-            .padding(.horizontal, 14).padding(.top, 12).padding(.bottom, 8)
+            .padding(.horizontal, 14).padding(.top, 8).padding(.bottom, 4)
 
             HStack(spacing: 6) {
                 Image(systemName: "magnifyingglass")
