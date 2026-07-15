@@ -1,23 +1,81 @@
 import SwiftUI
 
+enum SortKey: String, CaseIterable {
+    case updated, started, name, folder
+
+    var label: String {
+        switch self {
+        case .updated: return "Latest change"
+        case .started: return "Session start"
+        case .name: return "Title"
+        case .folder: return "Folder"
+        }
+    }
+
+    /// Natural first direction: dates newest-first, text A→Z.
+    var defaultAscending: Bool {
+        switch self {
+        case .updated, .started: return false
+        case .name, .folder: return true
+        }
+    }
+}
+
 @MainActor
 final class SessionsModel: ObservableObject {
     @Published var sessions: [Session] = []
     @Published var query = ""
+    @Published var sortKey: SortKey = SortKey(
+        rawValue: UserDefaults.standard.string(forKey: "sortKey") ?? "") ?? .updated {
+        didSet { UserDefaults.standard.set(sortKey.rawValue, forKey: "sortKey") }
+    }
+    @Published var sortAscending: Bool = UserDefaults.standard.object(
+        forKey: "sortAscending") as? Bool ?? false {
+        didSet { UserDefaults.standard.set(sortAscending, forKey: "sortAscending") }
+    }
+
+    /// Tap the active key again to flip direction; a new key starts with
+    /// its natural direction.
+    func selectSort(_ key: SortKey) {
+        if key == sortKey {
+            sortAscending.toggle()
+        } else {
+            sortKey = key
+            sortAscending = key.defaultAscending
+        }
+    }
     /// Bumped each time the panel is shown — the view uses it to refocus
     /// (and the model to reset) the search field.
     @Published var showGeneration = 0
     private var timer: Timer?
 
-    /// Case-insensitive substring match against everything user-visible.
+    /// Case-insensitive substring match against everything user-visible,
+    /// then the active sort.
     var filtered: [Session] {
         let q = query.trimmingCharacters(in: .whitespaces)
-        guard !q.isEmpty else { return sessions }
-        return sessions.filter { s in
-            [s.name, s.title ?? "", s.folder, s.cwd, s.hostLabel, s.hostApp,
-             s.sessionId, s.status, s.tty ?? ""]
-                .contains { $0.range(of: q, options: .caseInsensitive) != nil }
+        var list = sessions
+        if !q.isEmpty {
+            list = list.filter { s in
+                [s.name, s.title ?? "", s.folder, s.cwd, s.hostLabel, s.hostApp,
+                 s.sessionId, s.status, s.tty ?? ""]
+                    .contains { $0.range(of: q, options: .caseInsensitive) != nil }
+            }
         }
+        let less: (Session, Session) -> Bool = { [sortKey] a, b in
+            switch sortKey {
+            case .updated: return a.updatedAt < b.updatedAt
+            case .started: return a.startedAt < b.startedAt
+            case .name:
+                return a.displayTitle.localizedCaseInsensitiveCompare(b.displayTitle)
+                    == .orderedAscending
+            case .folder:
+                return a.folder.localizedCaseInsensitiveCompare(b.folder)
+                    == .orderedAscending
+            }
+        }
+        // Descending swaps arguments (not negation, which breaks ties).
+        list.sort { sortAscending ? less($0, $1) : less($1, $0) }
+        return list
     }
 
     func prepareForShow() {
@@ -115,27 +173,31 @@ struct SessionsView: View {
             }
             .padding(.horizontal, 14).padding(.top, 8).padding(.bottom, 4)
 
-            HStack(spacing: 6) {
-                Image(systemName: "magnifyingglass")
-                    .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
-                TextField("Filter sessions", text: $model.query)
-                    .textFieldStyle(.plain)
-                    .font(.system(size: 12))
-                    .focused($searchFocused)
-                if !model.query.isEmpty {
-                    Button {
-                        model.query = ""
-                    } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 11))
-                            .foregroundStyle(.secondary)
+            HStack(spacing: 8) {
+                HStack(spacing: 6) {
+                    Image(systemName: "magnifyingglass")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                    TextField("Filter sessions", text: $model.query)
+                        .textFieldStyle(.plain)
+                        .font(.system(size: 12))
+                        .focused($searchFocused)
+                    if !model.query.isEmpty {
+                        Button {
+                            model.query = ""
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .font(.system(size: 11))
+                                .foregroundStyle(.secondary)
+                        }
+                        .buttonStyle(.plain)
                     }
-                    .buttonStyle(.plain)
                 }
+                .padding(.horizontal, 8).padding(.vertical, 5)
+                .background(RoundedRectangle(cornerRadius: 6).fill(Color.secondary.opacity(0.12)))
+
+                SortMenu(model: model)
             }
-            .padding(.horizontal, 8).padding(.vertical, 5)
-            .background(RoundedRectangle(cornerRadius: 6).fill(Color.secondary.opacity(0.12)))
             .padding(.horizontal, 12).padding(.bottom, 8)
             .onChange(of: model.showGeneration) {
                 searchFocused = true
@@ -207,6 +269,40 @@ func showFocusError(_ message: String, session: Session) {
     } else {
         NSApp.activate(ignoringOtherApps: true)
         alert.runModal()
+    }
+}
+
+/// Compact sort selector: menu lists the keys; picking the active key
+/// again flips direction. The button shows the direction inline.
+private struct SortMenu: View {
+    @ObservedObject var model: SessionsModel
+
+    var body: some View {
+        Menu {
+            ForEach(SortKey.allCases, id: \.self) { key in
+                Button {
+                    model.selectSort(key)
+                } label: {
+                    if key == model.sortKey {
+                        Label(key.label,
+                              systemImage: model.sortAscending ? "chevron.up" : "chevron.down")
+                    } else {
+                        Text(key.label)
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 3) {
+                Image(systemName: model.sortAscending ? "arrow.up" : "arrow.down")
+                    .font(.system(size: 9, weight: .semibold))
+                Text(model.sortKey.label)
+                    .font(.system(size: 10.5))
+            }
+            .foregroundStyle(.secondary)
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+        .help("Sort sessions — pick again to reverse")
     }
 }
 
