@@ -115,7 +115,28 @@ fn main() {
                 }
             }
         }
-        _ => die("usage: voitta-task-engine <list|focus PID>"),
+        Some("kill") => {
+            let pid: i32 = args
+                .get(2)
+                .and_then(|s| s.parse().ok())
+                .unwrap_or_else(|| die("usage: voitta-task-engine kill <pid>"));
+            let sessions = scan();
+            let Some(s) = sessions.iter().find(|s| s.pid == pid) else {
+                die(&format!("no active session with pid {pid}"));
+            };
+            match kill_session(s) {
+                Ok(how) => {
+                    log_line(&format!("kill pid={pid} ok: {how}"));
+                    println!("{{\"ok\":true,\"how\":\"{how}\"}}");
+                }
+                Err(e) => {
+                    log_line(&format!("kill pid={pid} FAILED: {e}"));
+                    println!("{}", serde_json::json!({"ok": false, "error": e}));
+                    std::process::exit(1);
+                }
+            }
+        }
+        _ => die("usage: voitta-task-engine <list|focus PID|kill PID>"),
     }
 }
 
@@ -594,6 +615,107 @@ fn focus_terminal(s: &Session) -> Result<String, String> {
         Ok("terminal:tab-not-found".into())
     }
 }
+
+// ---------- kill ----------
+
+/// Terminate the claude process (TERM, escalate to KILL), drop its registry
+/// file, and for terminal hosts close the now-quiet tab.
+fn kill_session(s: &Session) -> Result<String, String> {
+    unsafe { libc::kill(s.pid, libc::SIGTERM) };
+    let mut waited = 0;
+    while pid_alive(s.pid) && waited < 2000 {
+        std::thread::sleep(std::time::Duration::from_millis(100));
+        waited += 100;
+    }
+    if pid_alive(s.pid) {
+        unsafe { libc::kill(s.pid, libc::SIGKILL) };
+        std::thread::sleep(std::time::Duration::from_millis(200));
+    }
+    // Claude removes its registry entry on clean exit; after SIGKILL it
+    // lingers — drop it so the session vanishes from lists immediately.
+    let _ = std::fs::remove_file(
+        home().join(".claude/sessions").join(format!("{}.json", s.pid)),
+    );
+
+    if s.host != "terminal" {
+        // No way to close an IDE editor tab from outside; the extension
+        // shows the session as ended.
+        return Ok(format!("killed:{}", s.host));
+    }
+    let Some(tty) = &s.tty else {
+        return Ok("killed:terminal (no tty, tab left open)".into());
+    };
+    // With claude gone only the login shell remains, so Terminal's default
+    // "prompt only for non-shell processes" close is silent.
+    let script = match s.host_app.as_str() {
+        "iTerm2" => ITERM_CLOSE,
+        "Terminal" => TERMINAL_CLOSE,
+        _ => return Ok("killed:terminal (tab close unsupported for this app)".into()),
+    };
+    let out = Command::new("/usr/bin/osascript")
+        .args(["-e", script, tty])
+        .output()
+        .map_err(|e| e.to_string())?;
+    let stdout = String::from_utf8_lossy(&out.stdout).trim().to_string();
+    let stderr = String::from_utf8_lossy(&out.stderr).trim().to_string();
+    log_line(&format!(
+        "close-tab {} tty={tty} exit={:?} stdout={stdout:?} stderr={stderr:?}",
+        s.host_app,
+        out.status.code()
+    ));
+    if out.status.success() && stdout == "ok" {
+        Ok("killed:terminal+tab".into())
+    } else {
+        Ok("killed:terminal (tab close failed)".into())
+    }
+}
+
+const TERMINAL_CLOSE: &str = r#"
+on run argv
+    set target to item 1 of argv
+    tell application "Terminal"
+        repeat with w in windows
+            try
+                if (count of tabs of w) is 1 then
+                    if (tty of tab 1 of w) is target then
+                        close w
+                        return "ok"
+                    end if
+                else
+                    repeat with t in tabs of w
+                        if (tty of t) is target then
+                            close t
+                            return "ok"
+                        end if
+                    end repeat
+                end if
+            end try
+        end repeat
+    end tell
+    return "not-found"
+end run
+"#;
+
+const ITERM_CLOSE: &str = r#"
+on run argv
+    set target to item 1 of argv
+    tell application "iTerm2"
+        repeat with w in windows
+            try
+                repeat with t in tabs of w
+                    repeat with s in sessions of t
+                        if (tty of s) is target then
+                            close s
+                            return "ok"
+                        end if
+                    end repeat
+                end repeat
+            end try
+        end repeat
+    end tell
+    return "not-found"
+end run
+"#;
 
 fn terminal_app_name(label: &str) -> &str {
     match label {

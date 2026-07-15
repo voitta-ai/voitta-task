@@ -83,6 +83,15 @@ final class SessionsModel: ObservableObject {
         showGeneration += 1
     }
 
+    /// Kill a session: remove the row immediately, then let the engine do
+    /// the actual work; the next poll reconciles either way.
+    func kill(_ session: Session) {
+        sessions.removeAll { $0.pid == session.pid }
+        Engine.kill(pid: session.pid) { err in
+            showFocusError(err, session: session, verb: "kill")
+        }
+    }
+
     func startPolling() {
         refresh()
         timer?.invalidate()
@@ -221,12 +230,15 @@ struct SessionsView: View {
                     // need the true content height for grow-then-scroll.
                     VStack(spacing: 2) {
                         ForEach(model.filtered) { s in
-                            SessionRow(session: s) {
-                                onActivate()
-                                Engine.focus(pid: s.pid) { err in
-                                    showFocusError(err, session: s)
-                                }
-                            }
+                            SessionRow(
+                                session: s,
+                                action: {
+                                    onActivate()
+                                    Engine.focus(pid: s.pid) { err in
+                                        showFocusError(err, session: s)
+                                    }
+                                },
+                                onKill: { model.kill(s) })
                         }
                     }
                     .padding(6)
@@ -250,9 +262,9 @@ struct SessionsView: View {
 }
 
 @MainActor
-func showFocusError(_ message: String, session: Session) {
+func showFocusError(_ message: String, session: Session, verb: String = "switch to") {
     let alert = NSAlert()
-    alert.messageText = "Couldn't switch to “\(session.name)”"
+    alert.messageText = "Couldn't \(verb) “\(session.name)”"
     let denied = message.contains("-1743") || message.lowercased().contains("not allowed")
     alert.informativeText = denied
         ? "macOS blocked VoittaTask from controlling \(session.hostApp). Enable VoittaTask under Automation in System Settings, then try again."
@@ -341,6 +353,7 @@ private struct StatusDot: View {
 private struct SessionRow: View {
     let session: Session
     let action: () -> Void
+    let onKill: () -> Void
     @State private var hovered = false
 
     var body: some View {
@@ -389,6 +402,15 @@ private struct SessionRow: View {
                         .font(.system(size: 10))
                         .foregroundStyle(.secondary)
                 }
+
+                Button(action: onKill) {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 14))
+                        .foregroundStyle(.red.opacity(hovered ? 0.9 : 0.45))
+                }
+                .buttonStyle(.plain)
+                .help("Kill this session" + (session.host == "terminal"
+                      ? " and close its tab" : " (IDE tab stays open)"))
             }
             .padding(.horizontal, 10).padding(.vertical, 7)
             .background(

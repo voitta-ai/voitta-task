@@ -111,6 +111,18 @@ enum Engine {
         }
     }
 
+    static func kill(pid: Int32, onError: @escaping (String) -> Void) {
+        DispatchQueue.global(qos: .userInitiated).async {
+            guard let data = try? run(["kill", String(pid)]) else {
+                DispatchQueue.main.async { onError("could not run voitta-task-engine") }
+                return
+            }
+            if let r = try? JSONDecoder().decode(ActionResult.self, from: data), !r.ok {
+                DispatchQueue.main.async { onError(r.error ?? "unknown error") }
+            }
+        }
+    }
+
     static func focus(pid: Int32, onError: @escaping (String) -> Void) {
         DispatchQueue.global(qos: .userInitiated).async {
             guard let data = try? run(["focus", String(pid)]) else {
