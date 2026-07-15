@@ -86,6 +86,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             w.delegate = self
             window = w
         }
+        model.prepareForShow() // fresh open: clear filter, focus search
         model.startPolling()
         positionNearStatusItem(window!)
         window!.makeKeyAndOrderFront(nil)

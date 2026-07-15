@@ -3,7 +3,27 @@ import SwiftUI
 @MainActor
 final class SessionsModel: ObservableObject {
     @Published var sessions: [Session] = []
+    @Published var query = ""
+    /// Bumped each time the panel is shown — the view uses it to refocus
+    /// (and the model to reset) the search field.
+    @Published var showGeneration = 0
     private var timer: Timer?
+
+    /// Case-insensitive substring match against everything user-visible.
+    var filtered: [Session] {
+        let q = query.trimmingCharacters(in: .whitespaces)
+        guard !q.isEmpty else { return sessions }
+        return sessions.filter { s in
+            [s.name, s.title ?? "", s.folder, s.cwd, s.hostLabel, s.hostApp,
+             s.sessionId, s.status, s.tty ?? ""]
+                .contains { $0.range(of: q, options: .caseInsensitive) != nil }
+        }
+    }
+
+    func prepareForShow() {
+        query = ""
+        showGeneration += 1
+    }
 
     func startPolling() {
         refresh()
@@ -38,6 +58,7 @@ struct SessionsView: View {
     /// Called after a session row is clicked — the host hides our window.
     var onActivate: () -> Void
     @State private var contentHeight: CGFloat = 0
+    @FocusState private var searchFocused: Bool
 
     /// Grow with content, scroll only past ~3/4 of the screen.
     private var listHeight: CGFloat {
@@ -51,21 +72,49 @@ struct SessionsView: View {
                 Text("Claude Code Sessions")
                     .font(.system(size: 13, weight: .semibold))
                 Spacer()
-                Text("\(model.sessions.count)")
+                Text(model.query.isEmpty
+                     ? "\(model.sessions.count)"
+                     : "\(model.filtered.count)/\(model.sessions.count)")
                     .font(.system(size: 11, weight: .medium))
                     .padding(.horizontal, 7).padding(.vertical, 2)
                     .background(Capsule().fill(Color.secondary.opacity(0.2)))
             }
             .padding(.horizontal, 14).padding(.top, 12).padding(.bottom, 8)
 
+            HStack(spacing: 6) {
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                TextField("Filter sessions", text: $model.query)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 12))
+                    .focused($searchFocused)
+                if !model.query.isEmpty {
+                    Button {
+                        model.query = ""
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal, 8).padding(.vertical, 5)
+            .background(RoundedRectangle(cornerRadius: 6).fill(Color.secondary.opacity(0.12)))
+            .padding(.horizontal, 12).padding(.bottom, 8)
+            .onChange(of: model.showGeneration) {
+                searchFocused = true
+            }
+
             Divider()
 
-            if model.sessions.isEmpty {
+            if model.filtered.isEmpty {
                 VStack(spacing: 6) {
-                    Image(systemName: "moon.zzz")
+                    Image(systemName: model.sessions.isEmpty ? "moon.zzz" : "magnifyingglass")
                         .font(.system(size: 24))
                         .foregroundStyle(.secondary)
-                    Text("No active sessions")
+                    Text(model.sessions.isEmpty ? "No active sessions" : "No matching sessions")
                         .font(.system(size: 12))
                         .foregroundStyle(.secondary)
                 }
@@ -75,7 +124,7 @@ struct SessionsView: View {
                     // Plain VStack (not lazy): row count is small and we
                     // need the true content height for grow-then-scroll.
                     VStack(spacing: 2) {
-                        ForEach(model.sessions) { s in
+                        ForEach(model.filtered) { s in
                             SessionRow(session: s) {
                                 onActivate()
                                 Engine.focus(pid: s.pid) { err in
