@@ -102,6 +102,16 @@ struct SessionsView: View {
                         .padding(.leading, 4)
                         .accessibilityLabel("Voitta")
                 }
+                Button {
+                    NSApp.terminate(nil)
+                } label: {
+                    Image(systemName: "power")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .padding(.leading, 2)
+                .help("Quit VoittaTask")
             }
             .padding(.horizontal, 14).padding(.top, 8).padding(.bottom, 4)
 

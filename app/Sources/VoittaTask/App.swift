@@ -34,7 +34,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         statusItem.button?.target = self
-        statusItem.button?.action = #selector(toggleWindow)
+        statusItem.button?.action = #selector(statusItemClicked)
+        statusItem.button?.sendAction(on: [.leftMouseUp, .rightMouseUp])
         let img = NSImage(systemSymbolName: "asterisk.circle.fill",
                           accessibilityDescription: "VoittaTask")
         img?.isTemplate = true
@@ -55,7 +56,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
     }
 
-    @objc private func toggleWindow() {
+    @objc private func statusItemClicked() {
+        // Right-click: standard menu-bar-app affordance for Quit.
+        if NSApp.currentEvent?.type == .rightMouseUp {
+            let menu = NSMenu()
+            let quit = NSMenuItem(title: "Quit VoittaTask",
+                                  action: #selector(quitApp), keyEquivalent: "q")
+            quit.target = self
+            menu.addItem(quit)
+            // Assign transiently so plain left-clicks keep toggling the panel.
+            statusItem.menu = menu
+            statusItem.button?.performClick(nil)
+            statusItem.menu = nil
+            return
+        }
+        toggleWindow()
+    }
+
+    @objc private func quitApp() {
+        NSApp.terminate(nil)
+    }
+
+    private func toggleWindow() {
         if let w = window, w.isVisible {
             hideWindow()
             return
