@@ -200,6 +200,38 @@ func showFocusError(_ message: String, session: Session) {
     }
 }
 
+/// Green = agent working; gray = idle; flashing orange = needs attention
+/// (turn blocked on a tool call — usually a pending permission approval).
+private struct StatusDot: View {
+    let state: String
+    @State private var dimmed = false
+
+    var body: some View {
+        Circle()
+            .fill(state == "waiting" ? Color.orange
+                  : state == "working" ? Color.green
+                  : Color.secondary.opacity(0.5))
+            .frame(width: state == "waiting" ? 8 : 6,
+                   height: state == "waiting" ? 8 : 6)
+            .opacity(dimmed ? 0.15 : 1)
+            .onAppear { restartPulse() }
+            .onChange(of: state) { restartPulse() }
+            .help(state == "waiting" ? "Waiting — likely needs your approval"
+                  : state == "working" ? "Working" : "Idle")
+    }
+
+    private func restartPulse() {
+        if state == "waiting" {
+            dimmed = false
+            withAnimation(.easeInOut(duration: 0.55).repeatForever(autoreverses: true)) {
+                dimmed = true
+            }
+        } else {
+            withAnimation(.linear(duration: 0.1)) { dimmed = false }
+        }
+    }
+}
+
 private struct SessionRow: View {
     let session: Session
     let action: () -> Void
@@ -219,11 +251,7 @@ private struct SessionRow: View {
                         Text(session.name)
                             .font(.system(size: 13, weight: .semibold))
                             .lineLimit(1)
-                        if session.status == "idle" {
-                            Circle().fill(Color.secondary.opacity(0.5)).frame(width: 6, height: 6)
-                        } else {
-                            Circle().fill(Color.green).frame(width: 6, height: 6)
-                        }
+                        StatusDot(state: session.state)
                     }
                     if let title = session.title, !title.isEmpty {
                         Text(title)

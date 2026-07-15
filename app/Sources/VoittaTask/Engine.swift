@@ -14,6 +14,8 @@ struct Session: Decodable, Identifiable, Equatable {
     let updatedAt: Int64
     let tty: String?
     let title: String?
+    /// "working" | "waiting" | "idle" — engine-derived activity state.
+    let state: String
 
     var id: Int32 { pid }
 

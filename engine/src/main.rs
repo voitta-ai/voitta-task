@@ -58,6 +58,9 @@ struct Session {
     tty: Option<String>,
     /// First real user prompt of the session (what `/resume` shows).
     title: Option<String>,
+    /// Derived activity state: "working" | "waiting" (likely blocked on an
+    /// approval) | "idle". Inferred from registry status + transcript.
+    state: String,
 }
 
 fn main() {
@@ -185,8 +188,12 @@ fn scan() -> Vec<Session> {
         } else {
             None
         };
-        let title = transcript_title(&r.cwd, &r.session_id)
+        let tpath = transcript_path(&r.cwd, &r.session_id);
+        let title = tpath
+            .as_deref()
+            .and_then(transcript_title)
             .or_else(|| titles.get(&r.session_id).cloned());
+        let state = derive_state(r.status.as_deref(), tpath.as_deref());
         out.push(Session {
             pid: r.pid,
             name: r.name.unwrap_or_else(|| r.session_id.clone()),
@@ -201,6 +208,7 @@ fn scan() -> Vec<Session> {
             started_at: r.started_at,
             updated_at: r.updated_at.unwrap_or(r.started_at),
             tty,
+            state,
         });
     }
     // Most recently active first.
@@ -208,26 +216,107 @@ fn scan() -> Vec<Session> {
     out
 }
 
-/// First real user prompt from the session transcript
-/// (~/.claude/projects/<encoded-cwd>/<sessionId>.jsonl). Streams lines and
-/// stops at the first genuine user message, so large transcripts stay cheap.
-fn transcript_title(cwd: &str, session_id: &str) -> Option<String> {
-    use std::io::BufRead;
+/// Locate the session transcript
+/// (~/.claude/projects/<encoded-cwd>/<sessionId>.jsonl).
+fn transcript_path(cwd: &str, session_id: &str) -> Option<std::path::PathBuf> {
     let encoded: String = cwd
         .chars()
         .map(|c| if c == '/' || c == '.' || c == '_' { '-' } else { c })
         .collect();
     let projects = home().join(".claude/projects");
-    let mut path = projects.join(&encoded).join(format!("{session_id}.jsonl"));
-    if !path.exists() {
-        // Session may have been started from a different directory than its
-        // current cwd — search every project folder for the transcript.
-        path = std::fs::read_dir(&projects)
-            .ok()?
-            .flatten()
-            .map(|e| e.path().join(format!("{session_id}.jsonl")))
-            .find(|p| p.exists())?;
+    let path = projects.join(&encoded).join(format!("{session_id}.jsonl"));
+    if path.exists() {
+        return Some(path);
     }
+    // Session may have been started from a different directory than its
+    // current cwd — search every project folder for the transcript.
+    std::fs::read_dir(&projects)
+        .ok()?
+        .flatten()
+        .map(|e| e.path().join(format!("{session_id}.jsonl")))
+        .find(|p| p.exists())
+}
+
+/// Derive "working" | "waiting" | "idle".
+///
+/// The transcript is the ground truth for VS Code sessions (whose registry
+/// entries carry no status): recent appends mean the agent is working; a
+/// transcript whose LAST entry is an assistant tool call that has produced
+/// no result for a while means the turn is blocked — almost always a
+/// permission prompt waiting for the user (or a very long-running tool;
+/// either way it deserves attention). The CLI's own registry status is
+/// trusted for the idle case, except a waiting hint overrides it.
+fn derive_state(registry_status: Option<&str>, tpath: Option<&std::path::Path>) -> String {
+    let (age_secs, pending_tool) = tpath.map_or((i64::MAX, false), transcript_activity);
+    if pending_tool && age_secs >= 20 {
+        return "waiting".into();
+    }
+    match registry_status {
+        Some("idle") => "idle".into(),
+        Some(_) => "working".into(), // any non-idle status the CLI reports
+        None => {
+            if age_secs <= 60 {
+                "working".into()
+            } else {
+                "idle".into()
+            }
+        }
+    }
+}
+
+/// (seconds since last transcript append, does it end in an unresolved
+/// assistant tool call?). Reads only the file tail.
+fn transcript_activity(path: &std::path::Path) -> (i64, bool) {
+    use std::io::{Read, Seek, SeekFrom};
+    let age = std::fs::metadata(path)
+        .and_then(|m| m.modified())
+        .ok()
+        .and_then(|t| t.elapsed().ok())
+        .map_or(i64::MAX, |d| d.as_secs() as i64);
+    let Ok(mut f) = std::fs::File::open(path) else {
+        return (age, false);
+    };
+    let len = f.metadata().map(|m| m.len()).unwrap_or(0);
+    let start = len.saturating_sub(256 * 1024);
+    if f.seek(SeekFrom::Start(start)).is_err() {
+        return (age, false);
+    }
+    let mut buf = String::new();
+    if f.read_to_string(&mut buf).is_err() {
+        return (age, false);
+    }
+    // Last decision-relevant entry wins: an assistant message ending the
+    // file with a tool_use block means the tool result never arrived.
+    for line in buf.lines().rev() {
+        let Ok(v) = serde_json::from_str::<serde_json::Value>(line) else {
+            continue;
+        };
+        match v.get("type").and_then(|t| t.as_str()) {
+            Some("assistant") => {
+                let pending = v
+                    .get("message")
+                    .and_then(|m| m.get("content"))
+                    .and_then(|c| c.as_array())
+                    .is_some_and(|blocks| {
+                        blocks.iter().any(|b| {
+                            b.get("type").and_then(|t| t.as_str()) == Some("tool_use")
+                        })
+                    });
+                return (age, pending);
+            }
+            // A user entry after the assistant turn is the tool result (or
+            // a new prompt) — nothing pending.
+            Some("user") => return (age, false),
+            _ => continue, // progress/summary/meta lines don't decide
+        }
+    }
+    (age, false)
+}
+
+/// First real user prompt from the session transcript. Streams lines and
+/// stops at the first genuine user message, so large transcripts stay cheap.
+fn transcript_title(path: &std::path::Path) -> Option<String> {
+    use std::io::BufRead;
     let f = std::fs::File::open(path).ok()?;
     let mut reader = std::io::BufReader::new(f);
     let mut line = String::new();
