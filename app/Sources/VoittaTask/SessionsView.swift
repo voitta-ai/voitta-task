@@ -247,21 +247,23 @@ private struct SessionRow: View {
 
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 6) {
-                        // Claude Code's own session name (from its registry).
-                        Text(session.name)
+                        // Human-readable conversation title (first prompt)
+                        // leads; the auto-generated registry name is detail.
+                        Text(session.displayTitle)
                             .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(.primary)
                             .lineLimit(1)
                         StatusDot(state: session.state)
                     }
-                    if let title = session.title, !title.isEmpty {
-                        Text(title)
-                            .font(.system(size: 11.5))
+                    if session.hasDistinctName {
+                        Text(session.name)
+                            .font(.system(size: 11))
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
                     }
                     Text(session.folder)
-                        .font(.system(size: 10.5))
-                        .foregroundStyle(.tertiary)
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
                         .lineLimit(1)
                         .truncationMode(.head)
                 }

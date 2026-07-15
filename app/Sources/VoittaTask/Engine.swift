@@ -19,6 +19,19 @@ struct Session: Decodable, Identifiable, Equatable {
 
     var id: Int32 { pid }
 
+    /// Primary label: the conversation's first prompt when available,
+    /// otherwise the auto-generated session name.
+    var displayTitle: String {
+        if let t = title, !t.isEmpty { return t }
+        return name
+    }
+
+    /// Show the registry name as a secondary line only when it isn't
+    /// already the primary label.
+    var hasDistinctName: Bool {
+        displayTitle != name
+    }
+
     var folder: String {
         let home = FileManager.default.homeDirectoryForCurrentUser.path
         return cwd.hasPrefix(home) ? "~" + cwd.dropFirst(home.count) : cwd
