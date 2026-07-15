@@ -6,7 +6,7 @@ app/.build/
 app/.swiftpm/
 
 # Built app bundle
-app/ClaudeBar.app/
+app/VoittaTask.app/
 
 # macOS
 .DS_Store
