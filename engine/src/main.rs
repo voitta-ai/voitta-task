@@ -1,8 +1,8 @@
-// claudebar-engine: enumerate active Claude Code sessions on macOS and
+// voitta-task-engine: enumerate active Claude Code sessions on macOS and
 // bring a chosen one to the foreground (terminal tab or VS Code window+tab).
 //
-//   claudebar-engine list          -> JSON array of active sessions
-//   claudebar-engine focus <pid>   -> raise that session's host UI
+//   voitta-task-engine list          -> JSON array of active sessions
+//   voitta-task-engine focus <pid>   -> raise that session's host UI
 //
 // Primary data source is ~/.claude/sessions/<pid>.json, a registry Claude
 // Code maintains for every running process. Entries are validated against
@@ -71,7 +71,7 @@ fn main() {
             let pid: i32 = args
                 .get(2)
                 .and_then(|s| s.parse().ok())
-                .unwrap_or_else(|| die("usage: claudebar-engine focus <pid>"));
+                .unwrap_or_else(|| die("usage: voitta-task-engine focus <pid>"));
             let sessions = scan();
             let Some(s) = sessions.iter().find(|s| s.pid == pid) else {
                 die(&format!("no active session with pid {pid}"));
@@ -112,7 +112,7 @@ fn main() {
                 }
             }
         }
-        _ => die("usage: claudebar-engine <list|focus PID>"),
+        _ => die("usage: voitta-task-engine <list|focus PID>"),
     }
 }
 
@@ -121,10 +121,10 @@ fn die(msg: &str) -> ! {
     std::process::exit(2);
 }
 
-/// Append a diagnostic line to ~/Library/Logs/ClaudeBar.log.
+/// Append a diagnostic line to ~/Library/Logs/VoittaTask.log.
 fn log_line(msg: &str) {
     use std::io::Write;
-    let path = home().join("Library/Logs/ClaudeBar.log");
+    let path = home().join("Library/Logs/VoittaTask.log");
     if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(path) {
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)

@@ -1,4 +1,4 @@
-# ClaudeBar
+# Voitta Task
 
 macOS menu bar app that lists all active Claude Code sessions (terminal + VS Code)
 and jumps to any of them with one click — raising the right window *and* the right
@@ -9,15 +9,15 @@ tab, then dismissing itself.
 Mirrors the SafeClaude split: a native UI shell + a headless engine.
 
 ```
-engine/   Rust   claudebar-engine — session discovery + focus actions (JSON CLI)
-app/      Swift  ClaudeBar — NSStatusItem + SwiftUI dropdown panel
+engine/   Rust   voitta-task-engine — session discovery + focus actions (JSON CLI)
+app/      Swift  VoittaTask — NSStatusItem + SwiftUI dropdown panel
 ```
 
-Build everything into `app/ClaudeBar.app`:
+Build everything into `app/VoittaTask.app`:
 
 ```bash
 app/make-app.sh
-open app/ClaudeBar.app
+open app/VoittaTask.app
 ```
 
 ## How sessions are discovered
@@ -48,7 +48,7 @@ Other useful signals (not needed for v1, documented for later):
 **Terminal (Terminal.app / iTerm2):** the engine knows the session's tty
 (`ps -o tty=`). AppleScript iterates windows/tabs, matches `tty`, selects the
 tab, raises the window, activates the app. First use triggers a one-time
-Automation permission prompt (ClaudeBar → Terminal/iTerm).
+Automation permission prompt (VoittaTask → Terminal/iTerm).
 
 **VS Code / Cursor:** two steps, ordering matters:
 1. `open -a "Visual Studio Code" <cwd>` — macOS focuses the existing window
@@ -61,8 +61,8 @@ Automation permission prompt (ClaudeBar → Terminal/iTerm).
 ## Engine CLI
 
 ```bash
-claudebar-engine list          # JSON array of active sessions
-claudebar-engine focus <pid>   # raise that session's host UI
+voitta-task-engine list          # JSON array of active sessions
+voitta-task-engine focus <pid>   # raise that session's host UI
 ```
 
 ## Known limitations (v1)

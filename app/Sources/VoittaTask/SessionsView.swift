@@ -103,7 +103,7 @@ func showFocusError(_ message: String, session: Session) {
     alert.messageText = "Couldn't switch to “\(session.name)”"
     let denied = message.contains("-1743") || message.lowercased().contains("not allowed")
     alert.informativeText = denied
-        ? "macOS blocked ClaudeBar from controlling \(session.hostApp). Enable ClaudeBar under Automation in System Settings, then try again."
+        ? "macOS blocked VoittaTask from controlling \(session.hostApp). Enable VoittaTask under Automation in System Settings, then try again."
         : message
     alert.alertStyle = .warning
     if denied {

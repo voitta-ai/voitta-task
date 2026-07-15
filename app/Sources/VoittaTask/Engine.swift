@@ -56,12 +56,12 @@ enum Engine {
     static var binaryURL: URL {
         let beside = Bundle.main.executableURL!
             .deletingLastPathComponent()
-            .appendingPathComponent("claudebar-engine")
+            .appendingPathComponent("voitta-task-engine")
         if FileManager.default.isExecutableFile(atPath: beside.path) { return beside }
-        return URL(fileURLWithPath: #filePath) // Sources/ClaudeBar/Engine.swift
+        return URL(fileURLWithPath: #filePath) // Sources/VoittaTask/Engine.swift
             .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
             .deletingLastPathComponent()
-            .appendingPathComponent("engine/target/release/claudebar-engine")
+            .appendingPathComponent("engine/target/release/voitta-task-engine")
     }
 
     private static func run(_ args: [String]) throws -> Data {
@@ -99,7 +99,7 @@ enum Engine {
     static func focus(pid: Int32, onError: @escaping (String) -> Void) {
         DispatchQueue.global(qos: .userInitiated).async {
             guard let data = try? run(["focus", String(pid)]) else {
-                DispatchQueue.main.async { onError("could not run claudebar-engine") }
+                DispatchQueue.main.async { onError("could not run voitta-task-engine") }
                 return
             }
             if let r = try? JSONDecoder().decode(ActionResult.self, from: data), !r.ok {

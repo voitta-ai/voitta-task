@@ -1,7 +1,7 @@
 import SwiftUI
 
 @main
-struct ClaudeBarApp: App {
+struct VoittaTaskApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var delegate
 
     var body: some Scene {
@@ -24,7 +24,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         statusItem.button?.target = self
         statusItem.button?.action = #selector(toggleWindow)
         let img = NSImage(systemSymbolName: "asterisk.circle.fill",
-                          accessibilityDescription: "ClaudeBar")
+                          accessibilityDescription: "VoittaTask")
         img?.isTemplate = true
         statusItem.button?.image = img
 
