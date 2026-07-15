@@ -84,7 +84,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                     // Fires during SwiftUI layout — mutate the window after.
                     DispatchQueue.main.async { self?.applyContentHeight(h) }
                 })
-            w.contentView = NSHostingView(rootView: root)
+            let hosting = NSHostingView(rootView: root)
+            // The (hidden) titlebar must not inset the content — without
+            // this SwiftUI reserves an empty strip at the top of the panel.
+            hosting.safeAreaRegions = []
+            w.contentView = hosting
             w.delegate = self
             window = w
         }
@@ -109,8 +113,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     /// filtering can shrink it), keeping the top edge pinned to the anchor.
     private func applyContentHeight(_ contentHeight: CGFloat) {
         guard let w = window else { return }
-        let target = w.frameRect(forContentRect:
-            NSRect(x: 0, y: 0, width: 560, height: contentHeight)).height
+        // .fullSizeContentView + no safe area: the SwiftUI content covers
+        // the whole frame, so frame height == content height exactly.
+        let target = contentHeight
         guard abs(w.frame.height - target) > 0.5 else { return }
         var frame = w.frame
         if let top = anchoredTopY {
