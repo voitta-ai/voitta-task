@@ -403,14 +403,20 @@ private struct SessionRow: View {
                         .foregroundStyle(.secondary)
                 }
 
-                Button(action: onKill) {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 14))
-                        .foregroundStyle(.red.opacity(hovered ? 0.9 : 0.45))
+                // Kill is terminal-only: we can close a terminal tab for
+                // real, but an IDE tab would linger showing a dead session.
+                if session.host == "terminal" {
+                    Button(action: onKill) {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 14))
+                            .foregroundStyle(.red.opacity(hovered ? 0.9 : 0.45))
+                    }
+                    .buttonStyle(.plain)
+                    .help("Kill this session and close its tab")
+                } else {
+                    // Keep row trailing edges aligned across hosts.
+                    Color.clear.frame(width: 14, height: 14)
                 }
-                .buttonStyle(.plain)
-                .help("Kill this session" + (session.host == "terminal"
-                      ? " and close its tab" : " (IDE tab stays open)"))
             }
             .padding(.horizontal, 10).padding(.vertical, 7)
             .background(
