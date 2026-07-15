@@ -10,6 +10,18 @@ struct VoittaTaskApp: App {
     }
 }
 
+/// Panel that closes on Escape (cancelOperation walks the responder chain
+/// from the SwiftUI content up to the window).
+private final class DismissablePanel: NSPanel {
+    var onCancel: (() -> Void)?
+    override func cancelOperation(_ sender: Any?) {
+        onCancel?()
+    }
+    // Non-activating panels with .titled style still refuse key status by
+    // default heuristics in some configurations; be explicit so ESC works.
+    override var canBecomeKey: Bool { true }
+}
+
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var statusItem: NSStatusItem!
@@ -53,10 +65,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     private func showWindow() {
         if window == nil {
-            let w = NSPanel(
+            let w = DismissablePanel(
                 contentRect: NSRect(x: 0, y: 0, width: 560, height: 460),
                 styleMask: [.titled, .fullSizeContentView, .nonactivatingPanel],
                 backing: .buffered, defer: false)
+            w.onCancel = { [weak self] in self?.hideWindow() }
             w.titleVisibility = .hidden
             w.titlebarAppearsTransparent = true
             w.isMovableByWindowBackground = true
