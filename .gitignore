@@ -1,0 +1,12 @@
+# Rust
+engine/target/
+
+# Swift
+app/.build/
+app/.swiftpm/
+
+# Built app bundle
+app/ClaudeBar.app/
+
+# macOS
+.DS_Store
