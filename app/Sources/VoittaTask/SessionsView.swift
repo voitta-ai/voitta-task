@@ -53,10 +53,20 @@ private struct ListHeightKey: PreferenceKey {
     }
 }
 
+private struct TotalHeightKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
+    }
+}
+
 struct SessionsView: View {
     @ObservedObject var model: SessionsModel
     /// Called after a session row is clicked — the host hides our window.
     var onActivate: () -> Void
+    /// Reports the view's natural height so the host window can shrink and
+    /// grow with the (possibly filtered) row count.
+    var onPreferredHeight: (CGFloat) -> Void = { _ in }
     @State private var contentHeight: CGFloat = 0
     @FocusState private var searchFocused: Bool
 
@@ -143,6 +153,13 @@ struct SessionsView: View {
             }
         }
         .frame(width: 560)
+        .fixedSize(horizontal: false, vertical: true)
+        .background(GeometryReader { g in
+            Color.clear.preference(key: TotalHeightKey.self, value: g.size.height)
+        })
+        .onPreferenceChange(TotalHeightKey.self) { h in
+            if h > 0 { onPreferredHeight(h) }
+        }
     }
 }
 

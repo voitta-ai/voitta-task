@@ -77,12 +77,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             w.level = .popUpMenu
             // Follow the user to whatever Space they're on, incl. fullscreen.
             w.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-            let hosting = NSHostingView(rootView: SessionsView(model: model) { [weak self] in
-                self?.hideWindow()
-            })
-            // Window follows SwiftUI's preferred size (grow-then-scroll).
-            hosting.sizingOptions = [.preferredContentSize]
-            w.contentView = hosting
+            let root = SessionsView(
+                model: model,
+                onActivate: { [weak self] in self?.hideWindow() },
+                onPreferredHeight: { [weak self] h in
+                    // Fires during SwiftUI layout — mutate the window after.
+                    DispatchQueue.main.async { self?.applyContentHeight(h) }
+                })
+            w.contentView = NSHostingView(rootView: root)
             w.delegate = self
             window = w
         }
@@ -103,14 +105,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         hideWindow()
     }
 
-    // Content growth resizes the window; keep its top edge pinned under
-    // the status item instead of growing downward off-anchor.
-    func windowDidResize(_ notification: Notification) {
-        guard let w = window, w.isVisible, let top = anchoredTopY else { return }
-        let target = NSPoint(x: w.frame.origin.x, y: top - w.frame.height)
-        if abs(target.y - w.frame.origin.y) > 0.5 {
-            w.setFrameOrigin(target)
+    /// Resize the panel to the content's natural height (both directions —
+    /// filtering can shrink it), keeping the top edge pinned to the anchor.
+    private func applyContentHeight(_ contentHeight: CGFloat) {
+        guard let w = window else { return }
+        let target = w.frameRect(forContentRect:
+            NSRect(x: 0, y: 0, width: 560, height: contentHeight)).height
+        guard abs(w.frame.height - target) > 0.5 else { return }
+        var frame = w.frame
+        if let top = anchoredTopY {
+            frame.origin.y = top - target
+        } else {
+            frame.origin.y += frame.height - target // keep top edge in place
         }
+        frame.size.height = target
+        w.setFrame(frame, display: true)
     }
 
     private func positionNearStatusItem(_ w: NSWindow) {
