@@ -16,20 +16,28 @@ struct Session: Decodable, Identifiable, Equatable {
     let title: String?
     /// "working" | "waiting" | "idle" — engine-derived activity state.
     let state: String
+    /// True when the name came from /rename rather than auto-generation.
+    let nameIsCustom: Bool
 
     var id: Int32 { pid }
 
-    /// Primary label: the conversation's first prompt when available,
-    /// otherwise the auto-generated session name.
+    /// Primary label: a user-chosen name (/rename) beats everything;
+    /// otherwise the conversation's first prompt; otherwise the
+    /// auto-generated session name.
     var displayTitle: String {
+        if nameIsCustom { return name }
         if let t = title, !t.isEmpty { return t }
         return name
     }
 
-    /// Show the registry name as a secondary line only when it isn't
-    /// already the primary label.
-    var hasDistinctName: Bool {
-        displayTitle != name
+    /// Secondary line: whichever of name/title lost the primary slot,
+    /// when it adds information.
+    var secondaryLabel: String? {
+        if nameIsCustom {
+            if let t = title, !t.isEmpty { return t }
+            return nil
+        }
+        return displayTitle == name ? nil : name
     }
 
     var folder: String {

@@ -374,8 +374,8 @@ private struct SessionRow: View {
                             .lineLimit(1)
                         StatusDot(state: session.state)
                     }
-                    if session.hasDistinctName {
-                        Text(session.name)
+                    if let secondary = session.secondaryLabel {
+                        Text(secondary)
                             .font(.system(size: 11))
                             .foregroundStyle(.secondary)
                             .lineLimit(1)

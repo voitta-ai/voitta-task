@@ -61,6 +61,9 @@ struct Session {
     /// Derived activity state: "working" | "waiting" (likely blocked on an
     /// approval) | "idle". Inferred from registry status + transcript.
     state: String,
+    /// True when `name` was set by the user (/rename) rather than
+    /// auto-generated from the folder name.
+    name_is_custom: bool,
 }
 
 fn main() {
@@ -215,9 +218,12 @@ fn scan() -> Vec<Session> {
             .and_then(transcript_title)
             .or_else(|| titles.get(&r.session_id).cloned());
         let state = derive_state(r.status.as_deref(), tpath.as_deref());
+        let name = r.name.unwrap_or_else(|| r.session_id.clone());
+        let name_is_custom = !is_auto_name(&name, &r.cwd);
         out.push(Session {
             pid: r.pid,
-            name: r.name.unwrap_or_else(|| r.session_id.clone()),
+            name,
+            name_is_custom,
             title,
             session_id: r.session_id,
             cwd: r.cwd,
@@ -235,6 +241,38 @@ fn scan() -> Vec<Session> {
     // Most recently active first.
     out.sort_by_key(|s| -s.updated_at);
     out
+}
+
+/// Claude auto-names sessions "<folder-slug>-<2 hex chars>" (e.g.
+/// "voitta-task-85" in /Users/x/DEVEL/voitta-task). Anything else is a
+/// user-chosen name from /rename. A registry entry with no name at all
+/// falls back to the session id, which parses as auto here (uuid ≠ slug
+/// pattern → custom would be wrong; check it explicitly).
+fn is_auto_name(name: &str, cwd: &str) -> bool {
+    // sessionId fallback (uuid) counts as auto/non-custom.
+    if name.len() == 36 && name.chars().filter(|c| *c == '-').count() == 4 {
+        return true;
+    }
+    let base = std::path::Path::new(cwd)
+        .file_name()
+        .and_then(|b| b.to_str())
+        .unwrap_or("");
+    let mut slug = String::new();
+    for c in base.chars() {
+        if c.is_ascii_alphanumeric() {
+            slug.push(c.to_ascii_lowercase());
+        } else if !slug.ends_with('-') {
+            slug.push('-');
+        }
+    }
+    let slug = slug.trim_matches('-');
+    let Some(rest) = name.strip_prefix(slug) else {
+        return false;
+    };
+    let Some(suffix) = rest.strip_prefix('-') else {
+        return false;
+    };
+    suffix.len() == 2 && suffix.chars().all(|c| c.is_ascii_hexdigit())
 }
 
 /// Locate the session transcript
