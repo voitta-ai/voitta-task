@@ -8,6 +8,9 @@ ROOT="$(dirname "$HERE")"
 (cd "$ROOT/engine" && cargo build --release)
 (cd "$HERE" && swift build -c release)
 
+# Single source of truth for the shipped version: engine/Cargo.toml.
+VERSION="$(grep -m1 '^version' "$ROOT/engine/Cargo.toml" | sed -E 's/version = "([^"]+)"/\1/')"
+
 APP="$HERE/VoittaTask.app"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
@@ -17,7 +20,7 @@ cp "$ROOT/engine/target/release/voitta-task-engine" "$APP/Contents/MacOS/voitta-
 # SPM resource bundle (dog logo etc.) — Bundle.module finds it in Resources/.
 cp -R "$HERE/.build/release/VoittaTask_VoittaTask.bundle" "$APP/Contents/Resources/"
 
-cat > "$APP/Contents/Info.plist" <<'PLIST'
+cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -27,7 +30,7 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
     <key>CFBundleName</key><string>VoittaTask</string>
     <key>CFBundleDisplayName</key><string>VoittaTask</string>
     <key>CFBundlePackageType</key><string>APPL</string>
-    <key>CFBundleShortVersionString</key><string>0.1.0</string>
+    <key>CFBundleShortVersionString</key><string>$VERSION</string>
     <key>CFBundleVersion</key><string>1</string>
     <key>LSMinimumSystemVersion</key><string>14.0</string>
     <key>LSUIElement</key><true/>
